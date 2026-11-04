@@ -1538,7 +1538,6 @@ $("dropZone").addEventListener("drop", event => {
   addFiles(event.dataTransfer.files);
 });
 
-$("copyBtn").addEventListener("click", copyResult);
 $("exportCsvBtn")?.addEventListener("click", exportBatchCsv);
 $("copyFileNameBtn").addEventListener("click", copyQuotationFileName);
 $("clearBtn").addEventListener("click", clearAll);
