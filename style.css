@@ -178,9 +178,8 @@ button, input, textarea {
 }
 
 .toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  position: static;
+  z-index: auto;
   margin-top: 18px;
   background: #fff;
   border: 1px solid var(--line);
@@ -647,6 +646,37 @@ button, input, textarea {
 
 .batch-list-summary {
   margin-left: auto;
+}
+
+/* 檔案清單獨立捲動區：可拖曳右側捲軸瀏覽長清單，不牽動判讀結果區。 */
+#fileList {
+  max-height: 470px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 2px 5px 2px 0;
+  scrollbar-width: auto;
+  scrollbar-color: #9aa8b8 #edf1f5;
+}
+
+#fileList::-webkit-scrollbar {
+  width: 13px;
+}
+
+#fileList::-webkit-scrollbar-track {
+  background: #edf1f5;
+  border-radius: 10px;
+}
+
+#fileList::-webkit-scrollbar-thumb {
+  background: #9aa8b8;
+  border: 3px solid #edf1f5;
+  border-radius: 10px;
+}
+
+#fileList::-webkit-scrollbar-thumb:hover {
+  background: #718096;
 }
 
 .file-item {
