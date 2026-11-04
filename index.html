@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="精聯電子維修報價單資訊提取工具">
   <title>精聯電子維修報價單資訊提取工具－批次測試版</title>
-  <link rel="stylesheet" href="style.css?v=20261104-stickybar1">
+  <link rel="stylesheet" href="style.css?v=20261104-scrollbatch2">
 </head>
 <body>
   <header class="topbar">
@@ -100,8 +100,11 @@
     </div>
 
     <section class="batch-export-card card" id="batchExportCard">
-      <div class="section-title">
-        <div><h2>批次判讀明細</h2><span id="batchSummary">上傳多張 PDF 後，這裡會逐張顯示判讀結果。</span></div>
+      <div class="batch-export-heading">
+        <div class="batch-export-title">
+          <button class="batch-export-toggle" id="batchResultsToggle" type="button" aria-expanded="true" aria-controls="batchResults">−</button>
+          <div><h2>批次判讀明細</h2><span id="batchSummary">上傳多張 PDF 後，這裡會逐張顯示判讀結果。</span></div>
+        </div>
       </div>
       <div id="batchResults" class="batch-results"></div>
       <p class="privacy-note">CSV 依目前 Google Sheet 欄位順序輸出，使用 UTF-8 BOM；每筆設備／零件依既有拆列規則產生資料列。請先檢查「待確認」案件。</p>
@@ -132,6 +135,6 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs" type="module"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=20261104-filelist-scroll2"></script>
+  <script src="app.js?v=20261104-scrollbatch2"></script>
 </body>
 </html>

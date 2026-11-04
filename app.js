@@ -1049,11 +1049,13 @@ if (def.type === "textarea") {
       updateConfidenceBadge();
       saveCurrentEdits();
       renderFileList();
+      renderBatchResults();
     });
     el.addEventListener("change", () => {
       state.fields[def.key] = el.value;
       saveCurrentEdits();
       renderFileList();
+      renderBatchResults();
     });
 
     updateFieldVisual(row, el, def);
@@ -1396,20 +1398,36 @@ function renderBatchResults() {
   host.innerHTML = "";
   const table = document.createElement("table");
   table.className = "batch-results-table";
-  table.innerHTML = `<thead><tr><th>檔案</th><th>SR 單號</th><th>設備數</th><th>判讀狀態</th><th>缺漏欄位</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>序號</th><th>檔案</th><th>SR 單號</th><th>設備數</th><th>判讀狀態</th><th>缺漏欄位</th></tr></thead>`;
   const body = document.createElement("tbody");
   state.batchResults.forEach((r, i) => {
     const f = r.fields || {};
-    const required = ["caseNumber", "srNumber", "model", "serial", "problem", "inspection"];
-    const missing = required.filter(k => !String(f[k] || "").trim());
+    // 以全部 13 個判讀欄位計算缺漏，避免只顯示部分缺漏欄位。
+    const missing = FIELD_DEFS.filter(def => !String(f[def.key] ?? "").trim());
     const tr = document.createElement("tr");
-    const cells = [r.fileName, f.srNumber || "—", String(Math.max(1, String(f.serial || "").split(/\r?\n/).filter(Boolean).length)), r.error ? "判讀失敗" : (missing.length ? "待確認" : "完成"), missing.map(k => FIELD_DEFS.find(d => d.key === k)?.label || k).join("、") || "無"];
-    cells.forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    if (r.error || missing.length) tr.classList.add(r.error ? "batch-row-error" : "batch-row-incomplete");
+    const values = [String(i + 1), r.fileName, f.srNumber || "—", String(Math.max(1, String(f.serial || "").split(/\r?\n/).filter(Boolean).length)), r.error ? "判讀失敗" : (missing.length ? `待確認（缺 ${missing.length} 欄）` : "完成")];
+    values.forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    const missingCell = document.createElement("td");
+    if (missing.length) {
+      const chips = document.createElement("div");
+      chips.className = "missing-field-list";
+      missing.forEach(def => {
+        const chip = document.createElement("span");
+        chip.className = "missing-field-chip";
+        chip.textContent = def.label;
+        chips.appendChild(chip);
+      });
+      missingCell.appendChild(chips);
+    } else {
+      missingCell.textContent = r.error ? "無法判讀" : "無";
+    }
+    tr.appendChild(missingCell);
     body.appendChild(tr);
   });
   table.appendChild(body);
   host.appendChild(table);
-  $("batchSummary").textContent = `已判讀 ${state.batchResults.length} / ${state.files.length} 張 PDF；匯出時會將每張 PDF 的資料列合併。`;
+  $("batchSummary").textContent = `已判讀 ${state.batchResults.filter(r => r.fields || r.error).length} / ${state.files.length} 張 PDF；共 ${state.batchResults.length} 個檔案，匯出時使用最新修改資料。`;
   $("exportCsvBtn").disabled = !state.batchResults.some(r => r.fields);
   renderFileList();
 }
@@ -1561,6 +1579,13 @@ $("fileListToggle").addEventListener("click", () => {
   const collapsed = list.classList.toggle("hidden");
   $("fileListToggle").textContent = collapsed ? "+" : "−";
   $("fileListToggle").setAttribute("aria-expanded", String(!collapsed));
+});
+
+$("batchResultsToggle")?.addEventListener("click", () => {
+  const panel = $("batchResults");
+  const collapsed = panel.classList.toggle("batch-results-collapsed");
+  $("batchResultsToggle").textContent = collapsed ? "+" : "−";
+  $("batchResultsToggle").setAttribute("aria-expanded", String(!collapsed));
 });
 
 $("chooseBtn").addEventListener("click", () => $("pdfInput").click());
