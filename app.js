@@ -990,6 +990,15 @@ function updateConfidenceBadge() {
   badge.classList.toggle("incomplete", filled < FIELD_DEFS.length);
 }
 
+// 將右側目前編輯值即時同步回批次結果；CSV 與左側清單共用這份資料。
+function saveCurrentEdits() {
+  if (!state.currentFile || !state.batchResults.length) return;
+  const result = state.batchResults[state.currentIndex];
+  if (!result || result.fileName !== state.currentFile.name || !result.fields) return;
+  result.fields = getEditedFields();
+  result.manuallyEdited = true;
+}
+
 function renderFields() {
   const container = $("resultFields");
   container.innerHTML = "";
@@ -1025,6 +1034,8 @@ if (def.type === "textarea") {
       updateQuotationFileName();
       updateGoogleSheetPreview();
       updateConfidenceBadge();
+      saveCurrentEdits();
+      renderFileList();
     });
 
     updateFieldVisual(row, el, def);
@@ -1273,10 +1284,14 @@ async function processFile(file) {
   }
 
   state.currentFile = file;
-  state.fields = emptyFields();
-  state.fields.fillDate = formatUploadDate(new Date());
-  state.rawText = "";
-  state.ocrUsed = false;
+  const matchedIndex = state.files.findIndex((item) => item === file || item.name === file.name);
+  if (matchedIndex >= 0) state.currentIndex = matchedIndex;
+  const savedResult = state.batchResults[state.currentIndex];
+  const hasSavedResult = !!savedResult?.fields && savedResult.fileName === file.name;
+  state.fields = hasSavedResult ? { ...savedResult.fields } : emptyFields();
+  if (!state.fields.fillDate) state.fields.fillDate = formatUploadDate(new Date());
+  state.rawText = hasSavedResult ? (savedResult.rawText || "") : "";
+  state.ocrUsed = hasSavedResult ? !!savedResult.ocrUsed : false;
 
   $("fileName").textContent = file.name;
   $("fileMeta").textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
@@ -1308,20 +1323,32 @@ async function processFile(file) {
       text = await ocrPdf(state.pdfDoc);
     }
 
-    state.rawText = text;
-    let layoutPages = [];
-    try {
-      layoutPages = await extractPdfLayout(state.pdfDoc);
-    } catch (layoutError) {
-      console.warn("座標判讀失敗，改用文字判讀：", layoutError);
+    if (!hasSavedResult) {
+      state.rawText = text;
+      let layoutPages = [];
+      try {
+        layoutPages = await extractPdfLayout(state.pdfDoc);
+      } catch (layoutError) {
+        console.warn("座標判讀失敗，改用文字判讀：", layoutError);
+      }
+      state.fields = parseQuotation(text, layoutPages);
+      state.fields.fillDate = formatUploadDate(new Date());
+      state.initialValues = { ...state.fields };
+      const batchResult = state.batchResults[state.currentIndex];
+      if (batchResult && batchResult.fileName === file.name) {
+        batchResult.fields = { ...state.fields };
+        batchResult.originalFields = { ...state.fields };
+        batchResult.rawText = text;
+        batchResult.ocrUsed = state.ocrUsed;
+      }
+    } else {
+      state.initialValues = { ...(savedResult.originalFields || savedResult.fields) };
+      state.fields = { ...savedResult.fields };
     }
-    state.fields = parseQuotation(text, layoutPages);
-    state.fields.fillDate = formatUploadDate(new Date());
-    state.initialValues = { ...state.fields };
 
     renderFields();
     updateQuotationFileName();
-    $("rawText").textContent = text;
+    $("rawText").textContent = state.rawText;
 
     const filled = FIELD_DEFS.filter(d => state.fields[d.key]?.trim()).length;
     updateConfidenceBadge();
@@ -1351,7 +1378,7 @@ async function analyzeBatchFile(file, index, total) {
   try { layoutPages = await extractPdfLayout(pdf); } catch (e) { console.warn(e); }
   const fields = parseQuotation(text, layoutPages);
   fields.fillDate = formatUploadDate(new Date());
-  return { fileName: file.name, fields, rawText: text, ocrUsed, pageCount: pdf.numPages };
+  return { fileName: file.name, fields: { ...fields }, originalFields: { ...fields }, rawText: text, ocrUsed, pageCount: pdf.numPages };
 }
 
 function countFilledFields(fields) {
@@ -1456,6 +1483,7 @@ function renderFileList() {
     name.title = "點擊切換此文件";
     name.style.cursor = "pointer";
     name.addEventListener("click", () => {
+      saveCurrentEdits();
       state.currentIndex = index;
       renderFileList();
       processFile(file);
