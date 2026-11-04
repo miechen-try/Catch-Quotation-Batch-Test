@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="精聯電子維修報價單資訊提取工具">
+  <title>精聯電子維修報價單資訊提取工具－批次測試版</title>
+  <link rel="stylesheet" href="style.css?v=20261104-batch1">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>精聯電子維修報價單資訊提取工具｜批次測試版</h1>
+      <p>多張 PDF 批次判讀 → 檢查缺漏 → 整批下載 CSV</p>
+    </div>
+    <div class="status-pill" id="statusPill">尚未載入</div>
+  </header>
+
+  <main class="container">
+    <section class="upload-card" id="dropZone">
+      <div class="upload-icon">📄</div>
+      <h2>拖曳 PDF 到這裡</h2>
+      <p>或選擇 PDF 檔案。文字型 PDF 會直接擷取；掃描型 PDF 會自動嘗試 OCR。</p>
+      <input id="pdfInput" type="file" accept="application/pdf,.pdf" multiple hidden>
+      <button class="primary-btn" id="chooseBtn" type="button">選擇 PDF</button>
+      <div class="drop-hint">支援多檔案・瀏覽器本機處理</div>
+    </section>
+
+    <section class="toolbar hidden" id="toolbar">
+      <div class="file-info">
+        <strong id="fileName">—</strong>
+        <span id="fileMeta">—</span>
+      </div>
+      <div class="toolbar-actions">
+        <button class="secondary-btn copy-sheet-btn" id="copyBtn" type="button">▦ 複製到 Google Sheet</button>
+        <button class="secondary-btn filename-btn" id="copyFileNameBtn" type="button"><span class="pdf-file-icon">PDF</span> 複製報價單檔名</button>
+        <button class="secondary-btn danger-btn" id="clearBtn" type="button">清除</button>
+      </div>
+    </section>
+
+    <div class="workspace hidden" id="workspace">
+      <section class="preview-panel card">
+        <div class="section-title">
+          <div>
+            <h2>PDF 預覽</h2>
+            <span id="pageLabel">第 1 / 1 頁</span>
+          </div>
+          <div class="page-controls">
+            <button id="prevPageBtn" type="button">‹</button>
+            <button id="nextPageBtn" type="button">›</button>
+          </div>
+        </div>
+        <div class="pdf-viewer" id="pdfViewer">
+          <canvas id="pdfCanvas"></canvas>
+          <div class="viewer-empty" id="viewerEmpty">尚未載入 PDF</div>
+        </div>
+      </section>
+
+      <section class="result-panel card">
+        <div class="section-title">
+          <div>
+            <h2>判讀結果</h2>
+            <span>所有欄位均可直接修改</span>
+          </div>
+          <span class="confidence" id="confidenceBadge">待判讀</span>
+        </div>
+
+        <div id="resultFields"></div>
+        <div class="quotation-name-block">
+          <div class="quotation-name-label">報價單檔名</div>
+          <div id="quotationFileName" class="quotation-name-value">—</div>
+        </div>
+
+        <div class="sheet-copy-block">
+          <div class="sheet-copy-header">
+            <div>
+              <div class="quotation-name-label">Google Sheet 一鍵貼上資料</div>
+              <div class="sheet-copy-hint">請在 Google Sheet 的 B 欄選取第一個儲存格後貼上；E 欄會保留空白，多個零件會自動拆成多列。</div>
+            </div>
+          </div>
+          <pre id="googleSheetPreview" class="sheet-copy-preview">—</pre>
+        </div>
+
+
+        <div class="raw-toggle">
+          <button class="text-btn" id="rawToggleBtn" type="button">顯示 / 隱藏原始文字</button>
+        </div>
+        <pre class="raw-text hidden" id="rawText"></pre>
+      </section>
+    </div>
+
+    <section class="batch-card card hidden" id="batchCard">
+      <div class="section-title">
+        <div>
+          <h2>檔案清單</h2>
+          <span>可選擇要編輯的檔案</span>
+        </div>
+      </div>
+      <div id="fileList"></div>
+    </section>
+
+    <section class="batch-export-card card" id="batchExportCard">
+      <div class="section-title">
+        <div><h2>批次判讀與 CSV 匯出</h2><span id="batchSummary">上傳多張 PDF 後，這裡會逐張顯示判讀結果。</span></div>
+        <button class="primary-btn" id="exportCsvBtn" type="button" disabled>下載整批 CSV</button>
+      </div>
+      <div id="batchResults" class="batch-results"></div>
+      <p class="privacy-note">CSV 依目前 Google Sheet 欄位順序輸出，使用 UTF-8 BOM；每筆設備／零件依既有拆列規則產生資料列。請先檢查「待確認」案件。</p>
+    </section>
+
+    <section class="help-card card">
+      <h2>判讀欄位</h2>
+      <div class="field-tags">
+        <span>案件編號</span>
+        <span>SR單號</span>
+        <span>填寫日期</span>
+        <span>門市名稱</span>
+        <span>報修設備</span>
+        <span>設備序號</span>
+        <span>故障原因</span>
+        <span>廠商檢測回覆</span>
+        <span>收費方式</span>
+        <span>更換零件料號</span>
+        <span>更換零件品名</span>
+        <span>更換零件數量</span>
+        <span>未稅報價</span>
+      </div>
+      <p class="privacy-note">🔒 PDF 預設在你的瀏覽器中處理，不會自動上傳到本網站伺服器。</p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs" type="module"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js?v=20261104-batch1"></script>
+</body>
+</html>
