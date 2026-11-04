@@ -991,12 +991,25 @@ function updateConfidenceBadge() {
 }
 
 // 將右側目前編輯值即時同步回批次結果；CSV 與左側清單共用這份資料。
+// 將目前右側欄位同步至該 PDF 專屬紀錄。所有欄位與 CSV 共用同一份資料。
+function getBatchResultForIndex(index) {
+  return state.batchResults.find(item => item && item.fileIndex === index)
+    || state.batchResults[index]
+    || null;
+}
+
 function saveCurrentEdits() {
-  if (!state.currentFile || !state.batchResults.length) return;
-  const result = state.batchResults[state.currentIndex];
-  if (!result || result.fileName !== state.currentFile.name || !result.fields) return;
-  result.fields = getEditedFields();
+  if (!state.currentFile) return false;
+  const index = state.files.findIndex(file => file === state.currentFile);
+  if (index < 0) return false;
+  const result = getBatchResultForIndex(index);
+  if (!result || !result.fields || result.fileName !== state.currentFile.name) return false;
+
+  const edited = getEditedFields();
+  result.fields = { ...edited };
   result.manuallyEdited = true;
+  state.fields = { ...edited };
+  return true;
 }
 
 function renderFields() {
@@ -1034,6 +1047,11 @@ if (def.type === "textarea") {
       updateQuotationFileName();
       updateGoogleSheetPreview();
       updateConfidenceBadge();
+      saveCurrentEdits();
+      renderFileList();
+    });
+    el.addEventListener("change", () => {
+      state.fields[def.key] = el.value;
       saveCurrentEdits();
       renderFileList();
     });
@@ -1278,20 +1296,25 @@ async function ocrPdf(pdf) {
 }
 
 async function processFile(file) {
-  if (!file || file.type !== "application/pdf") {
+  if (!file || (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name))) {
     showToast("請選擇 PDF 檔案");
     return;
   }
 
-  state.currentFile = file;
-  const matchedIndex = state.files.findIndex((item) => item === file || item.name === file.name);
+  // 切換前先保存上一張 PDF 的畫面內容。
+  saveCurrentEdits();
+  const matchedIndex = state.files.findIndex(item => item === file);
   if (matchedIndex >= 0) state.currentIndex = matchedIndex;
-  const savedResult = state.batchResults[state.currentIndex];
+  state.currentFile = file;
+  const savedResult = getBatchResultForIndex(state.currentIndex);
   const hasSavedResult = !!savedResult?.fields && savedResult.fileName === file.name;
   state.fields = hasSavedResult ? { ...savedResult.fields } : emptyFields();
   if (!state.fields.fillDate) state.fields.fillDate = formatUploadDate(new Date());
   state.rawText = hasSavedResult ? (savedResult.rawText || "") : "";
   state.ocrUsed = hasSavedResult ? !!savedResult.ocrUsed : false;
+  state.initialValues = hasSavedResult
+    ? { ...(savedResult.originalFields || savedResult.fields) }
+    : emptyFields();
 
   $("fileName").textContent = file.name;
   $("fileMeta").textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
@@ -1300,59 +1323,42 @@ async function processFile(file) {
   $("batchCard").classList.toggle("hidden", state.files.length === 0);
 
   setStatus("讀取 PDF…");
-
   try {
     const pdfjs = await loadPdfJs();
     const buffer = await file.arrayBuffer();
-
-    state.pdfDoc = await pdfjs.getDocument({
-      data: buffer
-    }).promise;
-
+    state.pdfDoc = await pdfjs.getDocument({ data: buffer }).promise;
     await renderPage(1);
 
-    let text = await extractPdfText(state.pdfDoc);
-
-    /*
-     * 如果擷取到的文字太少，視為掃描 PDF，改走 OCR。
-     * 閾值可依實際文件調整。
-     */
-    if (text.replace(/[\s-]/g, "").length < 80) {
-      state.ocrUsed = true;
-      setStatus("文字不足，啟動 OCR…");
-      text = await ocrPdf(state.pdfDoc);
-    }
-
+    // 批次判讀已有結果時直接使用保存資料，不再重新解析覆蓋手動修改。
     if (!hasSavedResult) {
-      state.rawText = text;
-      let layoutPages = [];
-      try {
-        layoutPages = await extractPdfLayout(state.pdfDoc);
-      } catch (layoutError) {
-        console.warn("座標判讀失敗，改用文字判讀：", layoutError);
+      let text = await extractPdfText(state.pdfDoc);
+      if (text.replace(/[\s-]/g, "").length < 80) {
+        state.ocrUsed = true;
+        setStatus("文字不足，啟動 OCR…");
+        text = await ocrPdf(state.pdfDoc);
       }
+      let layoutPages = [];
+      try { layoutPages = await extractPdfLayout(state.pdfDoc); }
+      catch (layoutError) { console.warn("座標判讀失敗，改用文字判讀：", layoutError); }
+      state.rawText = text;
       state.fields = parseQuotation(text, layoutPages);
       state.fields.fillDate = formatUploadDate(new Date());
       state.initialValues = { ...state.fields };
-      const batchResult = state.batchResults[state.currentIndex];
-      if (batchResult && batchResult.fileName === file.name) {
-        batchResult.fields = { ...state.fields };
-        batchResult.originalFields = { ...state.fields };
-        batchResult.rawText = text;
-        batchResult.ocrUsed = state.ocrUsed;
+      const result = getBatchResultForIndex(state.currentIndex);
+      if (result && result.fileName === file.name) {
+        result.fields = { ...state.fields };
+        result.originalFields = { ...state.fields };
+        result.rawText = text;
+        result.ocrUsed = state.ocrUsed;
       }
-    } else {
-      state.initialValues = { ...(savedResult.originalFields || savedResult.fields) };
-      state.fields = { ...savedResult.fields };
     }
 
     renderFields();
     updateQuotationFileName();
     $("rawText").textContent = state.rawText;
-
-    const filled = FIELD_DEFS.filter(d => state.fields[d.key]?.trim()).length;
+    const filled = FIELD_DEFS.filter(d => String(state.fields[d.key] || "").trim()).length;
     updateConfidenceBadge();
-
+    renderFileList();
     setStatus("判讀完成");
     showToast(`判讀完成：${filled}/${FIELD_DEFS.length} 個欄位有資料`);
   } catch (error) {
@@ -1362,7 +1368,6 @@ async function processFile(file) {
     showToast(error.message || "PDF 判讀失敗");
   }
 }
-
 
 async function analyzeBatchFile(file, index, total) {
   setStatus(`批次判讀 ${index + 1}/${total}：${file.name}`);
@@ -1378,7 +1383,7 @@ async function analyzeBatchFile(file, index, total) {
   try { layoutPages = await extractPdfLayout(pdf); } catch (e) { console.warn(e); }
   const fields = parseQuotation(text, layoutPages);
   fields.fillDate = formatUploadDate(new Date());
-  return { fileName: file.name, fields: { ...fields }, originalFields: { ...fields }, rawText: text, ocrUsed, pageCount: pdf.numPages };
+  return { fileIndex: index, fileName: file.name, fields: { ...fields }, originalFields: { ...fields }, rawText: text, ocrUsed, pageCount: pdf.numPages };
 }
 
 function countFilledFields(fields) {
@@ -1410,6 +1415,8 @@ function renderBatchResults() {
 }
 
 function exportBatchCsv() {
+  // CSV 匯出前強制同步目前正在編輯的 PDF。
+  saveCurrentEdits();
   const rows = [];
   for (const result of state.batchResults) {
     if (!result.fields) continue;
@@ -1428,14 +1435,24 @@ function exportBatchCsv() {
 }
 
 async function processBatchFiles() {
-  state.batchResults = [];
   const total = state.files.length;
+  // 預先建立每個檔案的固定索引槽，避免非同步判讀時結果陣列位置漂移。
+  state.batchResults = state.files.map((file, index) => ({ fileIndex: index, fileName: file.name, fields: null, pending: true }));
+  renderFileList();
   for (let i = 0; i < total; i++) {
     try {
-      state.batchResults.push(await analyzeBatchFile(state.files[i], i, total));
+      const analyzed = await analyzeBatchFile(state.files[i], i, total);
+      const existing = getBatchResultForIndex(i);
+      // 若該筆已被手動修改，絕不以背景判讀結果覆蓋。
+      if (existing?.manuallyEdited && existing.fields) {
+        existing.pending = false;
+      } else {
+        state.batchResults[i] = { ...analyzed, pending: false };
+      }
     } catch (error) {
       console.error(error);
-      state.batchResults.push({ fileName: state.files[i].name, error: error.message });
+      const existing = getBatchResultForIndex(i);
+      if (!existing?.fields) state.batchResults[i] = { fileIndex: i, fileName: state.files[i].name, error: error.message, pending: false };
     }
     renderBatchResults();
   }
@@ -1444,62 +1461,63 @@ async function processBatchFiles() {
 }
 
 async function addFiles(fileList) {
-  const pdfs = [...fileList].filter(
-    file => file.type === "application/pdf" || /\.pdf$/i.test(file.name)
-  );
-
-  if (!pdfs.length) {
-    showToast("沒有找到 PDF 檔案");
-    return;
-  }
+  const pdfs = [...fileList].filter(file => file.type === "application/pdf" || /\.pdf$/i.test(file.name));
+  if (!pdfs.length) { showToast("沒有找到 PDF 檔案"); return; }
 
   state.files = pdfs;
   state.batchResults = [];
   state.currentIndex = 0;
+  state.currentFile = null;
+  $("toolbar").classList.remove("hidden");
+  $("workspace").classList.remove("hidden");
+  $("batchCard").classList.toggle("hidden", pdfs.length === 0);
+  $("fileName").textContent = pdfs[0].name;
+  $("fileMeta").textContent = `${(pdfs[0].size / 1024 / 1024).toFixed(2)} MB`;
   renderFileList();
+  await processBatchFiles();
+  // 批次資料全部建立後才載入第一張，確保右側編輯一定有對應的保存紀錄。
   await processFile(state.files[0]);
-  if (state.files.length > 0) await processBatchFiles();
 }
 
 function renderFileList() {
   const list = $("fileList");
   list.innerHTML = "";
   $("fileListCount").textContent = `(${state.files.length} 張)`;
-  const completed = state.batchResults.filter(r => r.fields).length;
-  $("fileListSummary").textContent = state.batchResults.length
-    ? `已判讀 ${completed}/${state.files.length} 張`
-    : "等待判讀";
+  const completed = state.batchResults.filter(r => r?.fields).length;
+  $("fileListSummary").textContent = state.batchResults.length ? `已判讀 ${completed}/${state.files.length} 張` : "等待判讀";
 
   state.files.forEach((file, index) => {
-    const result = state.batchResults.find(r => r.fileName === file.name);
+    const result = getBatchResultForIndex(index);
     const filled = result?.fields ? countFilledFields(result.fields) : 0;
     const complete = !!result?.fields && filled === FIELD_DEFS.length;
     const item = document.createElement("div");
-    item.className = `file-item ${index === state.currentIndex ? "active" : ""} ${result && !complete ? "file-item-incomplete" : ""}`;
+    item.className = `file-item ${index === state.currentIndex ? "active" : ""} ${result && result.fields && !complete ? "file-item-incomplete" : ""}`;
 
     const name = document.createElement("div");
     name.className = "file-item-name";
     name.textContent = `${index + 1}. ${file.name}`;
     name.title = "點擊切換此文件";
     name.style.cursor = "pointer";
-    name.addEventListener("click", () => {
+    name.addEventListener("click", async () => {
+      if (state.batchResults.some(item => item?.pending)) {
+        showToast("請等待整批 PDF 判讀完成後再切換檔案");
+        return;
+      }
       saveCurrentEdits();
       state.currentIndex = index;
       renderFileList();
-      processFile(file);
+      await processFile(file);
     });
 
     const status = document.createElement("span");
-    status.className = `file-item-extraction ${result && !complete ? "incomplete" : ""}`;
+    status.className = `file-item-extraction ${result?.fields && !complete ? "incomplete" : ""}`;
     status.textContent = result?.error ? "判讀失敗" : result?.fields
-      ? `文字擷取・${filled}/${FIELD_DEFS.length} 欄位`
-      : "判讀中…";
-
+      ? `${result.ocrUsed ? "OCR" : "文字擷取"}・${filled}/${FIELD_DEFS.length} 欄位`
+      : result?.pending ? "判讀中…" : "等待判讀";
     item.append(name, status);
     list.appendChild(item);
   });
 }
-
 
 function clearAll() {
   state.files = [];
