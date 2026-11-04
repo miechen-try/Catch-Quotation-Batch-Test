@@ -595,3 +595,105 @@ button, input, textarea {
 .batch-results-table td:first-child { min-width: 220px; overflow-wrap: anywhere; }
 #exportCsvBtn:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 700px) { .batch-export-card .section-title { align-items: flex-start; flex-direction: column; } }
+
+/* 批次檔案清單：位於檔名工具列與 PDF 預覽之間 */
+.left-workspace-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.batch-card {
+  margin-top: 0;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+}
+
+.batch-list-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.collapse-list-btn {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: #e8f1fb;
+  color: var(--primary-dark);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.batch-list-title {
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.batch-list-title span,
+.batch-list-summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.batch-list-summary {
+  margin-left: auto;
+}
+
+.file-item {
+  margin: 9px 0 0;
+}
+
+.file-item-incomplete {
+  background: #fff5df;
+  border-color: #efb54b;
+}
+
+.file-item-incomplete.active {
+  background: #fff0d0;
+  border-color: #e49a16;
+}
+
+.file-item-extraction {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #e8f5eb;
+  color: #28743b;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.file-item-extraction.incomplete {
+  background: #ffe0dc;
+  color: #bd3026;
+}
+
+.csv-toolbar-btn {
+  background: #188038;
+  white-space: nowrap;
+}
+
+.csv-toolbar-btn:hover:not(:disabled) {
+  background: #126b2d;
+}
+
+.csv-toolbar-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 680px) {
+  .batch-list-heading { flex-wrap: wrap; }
+  .batch-list-summary { margin-left: 0; width: 100%; padding-left: 42px; }
+  .file-item { align-items: flex-start; flex-direction: column; }
+  .file-item-extraction { white-space: normal; }
+  .toolbar-actions { width: 100%; }
+}

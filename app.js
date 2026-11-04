@@ -1282,7 +1282,7 @@ async function processFile(file) {
   $("fileMeta").textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
   $("toolbar").classList.remove("hidden");
   $("workspace").classList.remove("hidden");
-  $("batchCard").classList.toggle("hidden", state.files.length <= 1);
+  $("batchCard").classList.toggle("hidden", state.files.length === 0);
 
   setStatus("讀取 PDF…");
 
@@ -1354,6 +1354,10 @@ async function analyzeBatchFile(file, index, total) {
   return { fileName: file.name, fields, rawText: text, ocrUsed, pageCount: pdf.numPages };
 }
 
+function countFilledFields(fields) {
+  return FIELD_DEFS.filter(def => String(fields?.[def.key] || "").trim()).length;
+}
+
 function renderBatchResults() {
   const host = $("batchResults");
   if (!host) return;
@@ -1375,6 +1379,7 @@ function renderBatchResults() {
   host.appendChild(table);
   $("batchSummary").textContent = `已判讀 ${state.batchResults.length} / ${state.files.length} 張 PDF；匯出時會將每張 PDF 的資料列合併。`;
   $("exportCsvBtn").disabled = !state.batchResults.some(r => r.fields);
+  renderFileList();
 }
 
 function exportBatchCsv() {
@@ -1422,6 +1427,7 @@ async function addFiles(fileList) {
   }
 
   state.files = pdfs;
+  state.batchResults = [];
   state.currentIndex = 0;
   renderFileList();
   await processFile(state.files[0]);
@@ -1431,15 +1437,22 @@ async function addFiles(fileList) {
 function renderFileList() {
   const list = $("fileList");
   list.innerHTML = "";
+  $("fileListCount").textContent = `(${state.files.length} 張)`;
+  const completed = state.batchResults.filter(r => r.fields).length;
+  $("fileListSummary").textContent = state.batchResults.length
+    ? `已判讀 ${completed}/${state.files.length} 張`
+    : "等待判讀";
 
   state.files.forEach((file, index) => {
+    const result = state.batchResults.find(r => r.fileName === file.name);
+    const filled = result?.fields ? countFilledFields(result.fields) : 0;
+    const complete = !!result?.fields && filled === FIELD_DEFS.length;
     const item = document.createElement("div");
-    item.className = `file-item ${index === state.currentIndex ? "active" : ""}`;
+    item.className = `file-item ${index === state.currentIndex ? "active" : ""} ${result && !complete ? "file-item-incomplete" : ""}`;
 
     const name = document.createElement("div");
     name.className = "file-item-name";
     name.textContent = `${index + 1}. ${file.name}`;
-
     name.title = "點擊切換此文件";
     name.style.cursor = "pointer";
     name.addEventListener("click", () => {
@@ -1448,10 +1461,17 @@ function renderFileList() {
       processFile(file);
     });
 
-    item.appendChild(name);
+    const status = document.createElement("span");
+    status.className = `file-item-extraction ${result && !complete ? "incomplete" : ""}`;
+    status.textContent = result?.error ? "判讀失敗" : result?.fields
+      ? `文字擷取・${filled}/${FIELD_DEFS.length} 欄位`
+      : "判讀中…";
+
+    item.append(name, status);
     list.appendChild(item);
   });
 }
+
 
 function clearAll() {
   state.files = [];
@@ -1474,6 +1494,9 @@ function clearAll() {
   $("rawText").textContent = "";
   $("confidenceBadge").textContent = "待判讀";
   $("fileList").innerHTML = "";
+  if ($("fileListCount")) $("fileListCount").textContent = "(0 張)";
+  if ($("fileListSummary")) $("fileListSummary").textContent = "等待判讀";
+  if ($("exportCsvBtn")) $("exportCsvBtn").disabled = true;
   if ($("batchResults")) $("batchResults").innerHTML = "";
   if ($("batchSummary")) $("batchSummary").textContent = "";
   $("viewerEmpty").classList.remove("hidden");
@@ -1486,6 +1509,13 @@ function clearAll() {
   setStatus("尚未載入");
   showToast("已清除");
 }
+
+$("fileListToggle").addEventListener("click", () => {
+  const list = $("fileList");
+  const collapsed = list.classList.toggle("hidden");
+  $("fileListToggle").textContent = collapsed ? "+" : "−";
+  $("fileListToggle").setAttribute("aria-expanded", String(!collapsed));
+});
 
 $("chooseBtn").addEventListener("click", () => $("pdfInput").click());
 
