@@ -370,7 +370,7 @@ function normalizeRepairModel(raw) {
   const value = String(raw || "").replace(/\s+/g, " ").trim();
   // ZD230 的機器品號可能是 ZD23042-307G00EZ，型號仍應統一為 ZD230。
   if (/\bZD\s*230/i.test(value)) return "ZD230";
-  const m = value.match(/(Cino\s*A678\s*\(RS232\)|MS\d+|PA\d+(?:槍把)?|TC\d+|RP-?\d+|ZD\d+|DA\d+|SBarco(?:\(含裁刀\))?|Sewoo|TSC\s+ALPHA-40L)/i);
+  const m = value.match(/(Cino\s*A678\s*\(RS232\)|MS\d+|PA\d+(?:槍把)?|TC\d{1,4}(?!\d)|RP-?\d+|ZD\d+|DA\d+|SBarco(?:\(含裁刀\))?|Sewoo|TSC\s+ALPHA-40L)/i);
   return m ? m[1] : value;
 }
 
@@ -832,7 +832,7 @@ function parseQuotation(text, layoutPages = null) {
         ]));
     fields.model = layoutRepairRows.map(r => {
       const rowModel = normalizeRepairModel(r.model);
-      const hasKnownModel = /(?:Cino\s*A678|MS\d+|PA\d+|TC\d+|RP-?\d+|ZD\d+|DA\d+|TSC|SBarco|Sewoo)/i.test(rowModel);
+      const hasKnownModel = /(?:Cino\s*A678|MS\d+|PA\d+|TC\d{1,4}(?!\d)|RP-?\d+|ZD\d+|DA\d+|TSC|SBarco|Sewoo)/i.test(rowModel);
       return getSheetModel(hasKnownModel ? rowModel : modelFallback);
     }).join("\n");
     fields.serial = layoutRepairRows.map(r => r.serial).join("\n");
@@ -888,6 +888,11 @@ function parseQuotation(text, layoutPages = null) {
     fields.problem = "藍芽專案檢測";
     fields.inspection = "1.主板故障列印淡且無法校正完成,報價";
     fields.model = "標籤機ZD230";
+  }
+
+  // 最終以「客戶維修單號」中的明確機型為優先，避免 TC224460048 等設備序號被誤判為 TC 型號。
+  if (customerRepairModel && layoutRepairRows.length <= 1) {
+    fields.model = getSheetModel(customerRepairModel[1]);
   }
 
   // ZD230 報價單的報修設備統一輸出 Google Sheet 使用的正式名稱。
