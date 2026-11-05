@@ -212,7 +212,7 @@ function mapContactToWarehouse(value) {
   const contact = String(value || "").trim();
   if (!contact) return "";
   const lower = contact.toLowerCase();
-  if (["emma lin", "benson kuo", "benson", "emily"].some(name => lower.includes(name))) {
+  if (["emily hsu", "emma lin", "benson kuo", "ruru li"].some(name => lower.includes(name))) {
     return "SOC北倉";
   }
   // 蝦皮下貨聯絡人固定顯示「門市」，不得誤套用 IM 北倉規則。
@@ -226,7 +226,7 @@ function mapContactToWarehouse(value) {
 function buildQuotationFileName() {
   const f = getEditedFields();
 
-  const contact = (f.contact || "").trim();
+  const contact = mapContactToWarehouse(f.contact || "").trim();
   const models = String(f.model || "")
     .split(/\r?\n/)
     .map(x => x.trim())
@@ -250,6 +250,17 @@ function buildQuotationFileName() {
 
   const baseName = [contact, body].filter(Boolean).join("_");
   return baseName ? `${baseName}.pdf` : "";
+}
+
+function formatAccountingAmount(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const numeric = Number(raw.replace(/,/g, "").replace(/^\$/, ""));
+  if (!Number.isFinite(numeric)) return raw;
+  return numeric.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(numeric) ? 0 : 2,
+    maximumFractionDigits: 2
+  });
 }
 
 function buildGoogleSheetRows(fieldsOverride = null) {
@@ -311,7 +322,7 @@ function buildGoogleSheetRows(fieldsOverride = null) {
       pick(parts, i),
       pick(names, i),
       pick(quantities, i),
-      pick(prices, i)
+      formatAccountingAmount(pick(prices, i))
     ];
 
     rows.push(
@@ -556,6 +567,13 @@ function parseQuotation(text, layoutPages = null) {
     const modelMatch = normalized.match(/\b(PA\d+(?:槍把)?|MS\d+|RP-700|Sewoo|SBarco(?:\(含裁刀\))?|ZD230|DA210|TSC\s+ALPHA-40L)\b/i);
     if (modelMatch) fields.model = cleanValue(modelMatch[1]);
   }
+
+  // 客戶維修單號中的型號優先於設備序號；例如 TC200-RR...，
+  // 表格下一行的 TC224320044 是設備序號，不能誤判成 TC224320044 型號。
+  const customerRepairModel = normalized.match(
+    /客戶維修單號\s*[:：]?\s*(TC\d+)\s*-\s*RR[A-Z0-9-]+/i
+  );
+  if (customerRepairModel) fields.model = getSheetModel(customerRepairModel[1]);
 
   // 4. 找「機器品號 / 序號」表格列。
   // PDF.js / pdftotext 可能有兩種排列：
@@ -807,9 +825,11 @@ function parseQuotation(text, layoutPages = null) {
   // 同時把 PDF 因欄寬造成的換行合併，不再讓換行被誤認成另一筆資料。
   if (layoutRepairRows.length) {
     const cases = repairNumbers.slice(0, layoutRepairRows.length);
-    const modelFallback = fields.model || firstMatch(normalized, [
-      /客戶維修單號\s*[:：]?\s*(MS\d+|PA\d+(?:槍把)?|TC\d+|SBarco(?:\(含裁刀\))?|RP-?\d+|ZD\d+|DA\d+|TSC\s+ALPHA-40L)/i
-    ]);
+    const modelFallback = customerRepairModel
+      ? getSheetModel(customerRepairModel[1])
+      : (fields.model || firstMatch(normalized, [
+          /客戶維修單號\s*[:：]?\s*(MS\d+|PA\d+(?:槍把)?|TC\d+|SBarco(?:\(含裁刀\))?|RP-?\d+|ZD\d+|DA\d+|TSC\s+ALPHA-40L)/i
+        ]));
     fields.model = layoutRepairRows.map(r => {
       const rowModel = normalizeRepairModel(r.model);
       const hasKnownModel = /(?:Cino\s*A678|MS\d+|PA\d+|TC\d+|RP-?\d+|ZD\d+|DA\d+|TSC|SBarco|Sewoo)/i.test(rowModel);
