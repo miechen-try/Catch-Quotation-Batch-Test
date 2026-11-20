@@ -442,8 +442,8 @@ function extractRepairTableByColumns(layoutPages) {
 
       const machineTexts = ordered.filter(x => x.x < b1).map(x => x.str).join("").trim();
       const machineCellText = machineTexts.trim();
-      const looksLikeSerialOnly = /^(?:UT[A-Z0-9]{7,}|UTA[A-Z0-9]{6,}|TC\d{8,}|\d{12,})$/i.test(machineCellText);
-      const looksLikeMachine = !looksLikeSerialOnly && /(?:MS\d+|PA\d+|RP-?\d+|ZD\d+|DA\d+|TC\d+|TSC|SBarco|Sewoo|Cino\s*A678|^[A-Z0-9]+(?:-[A-Z0-9]+){2,})/i.test(machineCellText);
+      const looksLikeSerialOnly = /^(?:UT[A-Z0-9]{7,}|UTA[A-Z0-9]{6,}|TC\d{8,}|\d{12,}|[A-Z0-9]{9,})$/i.test(machineCellText);
+      const looksLikeMachine = !looksLikeSerialOnly && /(?:MS\d+|PA\d+|RP-?\d+|ZD\d+|DA\d+|TC\d+|TSC|SBarco|Sewoo|Cino\s*A678|^[A-Z0-9][A-Z0-9_-]{7,})/i.test(machineCellText);
 
       if (looksLikeMachine) {
         if (current) rowGroups.push(current);
@@ -524,6 +524,15 @@ function parseQuotation(text, layoutPages = null) {
 
   // 先從「客戶維修單號」完整區塊擷取所有 RR 編號，避免 PDF 換行把 RR 拆斷。
   const repairNumbers = extractRepairNumbers(normalized);
+  // 客戶維修單號清單可能同時列出各設備型號；保留斜線分隔順序，
+  // 例如四筆 RP-700-RR... 後接第五筆 Sewoo，供逐列型號對應。
+  const repairModelCandidates = (() => {
+    const block = normalized.match(/客戶維修單號\\s*[:：]?\\s*([\\s\\S]*?)(?=\\n\\s*(?:1[、．.]|附\\s*註|附註)|$)/i)?.[1] || "";
+    return block.split(/[／/、，,]+/).map(part => {
+      const token = cleanValue(part).replace(/-RR[A-Z0-9-]+/i, "").trim();
+      return token;
+    }).filter(Boolean);
+  })();
   const layoutRepairRows = extractRepairTableByColumns(layoutPages);
 
   // 1. 門市名稱
@@ -839,10 +848,11 @@ function parseQuotation(text, layoutPages = null) {
       : (fields.model || firstMatch(normalized, [
           /客戶維修單號\s*[:：]?\s*(MS\d+|PA\d+(?:槍把)?|TC\d+|SBarco(?:\(含裁刀\))?|RP-?\d+|ZD\d+|DA\d+|TSC\s+ALPHA-40L)/i
         ]));
-    fields.model = layoutRepairRows.map(r => {
+    fields.model = layoutRepairRows.map((r, index) => {
       const rowModel = normalizeRepairModel(r.model);
       const hasKnownModel = /(?:Cino\s*A678|MS\d+|PA\d+|TC\d{1,4}(?!\d)|RP-?\d+|ZD\d+|DA\d+|TSC|SBarco|Sewoo)/i.test(rowModel);
-      return getSheetModel(hasKnownModel ? rowModel : modelFallback);
+      const alignedModel = repairModelCandidates[index] || modelFallback;
+      return getSheetModel(hasKnownModel ? rowModel : alignedModel);
     }).join("\n");
     fields.serial = layoutRepairRows.map(r => r.serial).join("\n");
     fields.problem = layoutRepairRows.map(r => cleanIssueText(r.problem, r.serial)).join("\n");

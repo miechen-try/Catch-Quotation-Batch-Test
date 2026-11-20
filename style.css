@@ -408,19 +408,6 @@ button, input, textarea {
   font-weight: 800;
 }
 
-.file-item.active::after {
-  content: "目前選取";
-  flex: 0 0 auto;
-  padding: 3px 7px;
-  border-radius: 5px;
-  background: #075da8;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .03em;
-}
-
-
 .file-item-name {
   overflow: hidden;
   text-overflow: ellipsis;
