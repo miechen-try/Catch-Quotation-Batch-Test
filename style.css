@@ -397,9 +397,29 @@ button, input, textarea {
 }
 
 .file-item.active {
-  border-color: var(--primary);
-  background: #f5fbff;
+  position: relative;
+  border: 2px solid #075da8;
+  background: #dceeff;
+  box-shadow: 0 0 0 2px rgba(7, 93, 168, .16), inset 5px 0 0 #075da8;
 }
+
+.file-item.active .file-item-name {
+  color: #073b68;
+  font-weight: 800;
+}
+
+.file-item.active::after {
+  content: "目前選取";
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #075da8;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+
 
 .file-item-name {
   overflow: hidden;
@@ -690,9 +710,12 @@ button, input, textarea {
 }
 
 .file-item-incomplete.active {
-  background: #fff0d0;
-  border-color: #e49a16;
+  background: #dceeff;
+  border: 2px solid #075da8;
+  box-shadow: 0 0 0 2px rgba(7, 93, 168, .16), inset 5px 0 0 #e49a16;
 }
+
+.file-item-incomplete.active .file-item-name { color: #073b68; }
 
 .file-item-extraction {
   flex: 0 0 auto;
@@ -731,3 +754,7 @@ button, input, textarea {
   .file-item-extraction { white-space: normal; }
   .toolbar-actions { width: 100%; }
 }
+
+/* 單筆快速複製：緊接在整批 CSV 後，免除單筆報價額外下載流程。 */
+#copyResultBtn { background: #247a45; color: #fff; white-space: nowrap; }
+#copyResultBtn:hover { background: #195f35; color: #fff; }

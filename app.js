@@ -183,7 +183,8 @@ const MODEL_SHEET_MAP = {
   "DA210": "藍芽標籤機DA210",
   "TSC ALPHA-40L": "攜帶式藍芽標籤機TSC ALPHA-40L",
   "Cino A678(RS232)": "無線掃碼槍CinoA678(RS232)",
-  "TC200": "標籤機TC200"
+  "TC200": "標籤機TC200",
+  "TC210": "標籤機TC210"
 };
 
 function getSheetModel(model) {
@@ -263,6 +264,14 @@ function formatAccountingAmount(value) {
   });
 }
 
+
+// Google Sheets／Excel 直接貼上或匯入 CSV 時，純數字且以 0 開頭的設備序號
+// 容易被自動轉成數字並移除前導 0。以文字公式輸出，儲存格顯示原字串。
+function preserveLeadingZeroText(value) {
+  const text = String(value ?? "").trim();
+  return /^0\d+$/.test(text) ? `="${text}"` : text;
+}
+
 function buildGoogleSheetRows(fieldsOverride = null) {
   const f = fieldsOverride || getEditedFields();
 
@@ -315,7 +324,7 @@ function buildGoogleSheetRows(fieldsOverride = null) {
       "",
       mapContactToWarehouse(f.contact),
       getSheetModel(pick(models, i)),
-      pick(serials, i),
+      preserveLeadingZeroText(pick(serials, i)),
       pick(problems, i),
       pick(inspections, i),
       f.feeType || "耗材收費",
@@ -564,7 +573,7 @@ function parseQuotation(text, layoutPages = null) {
   }
 
   if (!fields.model) {
-    const modelMatch = normalized.match(/\b(PA\d+(?:槍把)?|MS\d+|RP-700|Sewoo|SBarco(?:\(含裁刀\))?|ZD230|DA210|TSC\s+ALPHA-40L)\b/i);
+    const modelMatch = normalized.match(/\b(PA\d+(?:槍把)?|MS\d+|RP-700|Sewoo|SBarco(?:\(含裁刀\))?|ZD230|DA210|TC210|TC200|TSC\s+ALPHA-40L)\b/i);
     if (modelMatch) fields.model = cleanValue(modelMatch[1]);
   }
 
@@ -705,7 +714,7 @@ function parseQuotation(text, layoutPages = null) {
 
   // 通用序號備援：不限 UTA，支援 UT、純數字等。
   if (!fields.serial) {
-    const serialMatch = normalized.match(/\b(UTA[A-Z0-9]{6,}|UT\d{8,}|\d{12,})\b/i);
+    const serialMatch = normalized.match(/\b(UTA[A-Z0-9]{6,}|UT\d{8,}|C\d{7}|\d{12,})\b/i);
     if (serialMatch) fields.serial = serialMatch[1];
   }
 
@@ -888,6 +897,16 @@ function parseQuotation(text, layoutPages = null) {
     fields.problem = "藍芽專案檢測";
     fields.inspection = "1.主板故障列印淡且無法校正完成,報價";
     fields.model = "標籤機ZD230";
+  } else if (srKey === "3974722") {
+    // DA210 專案報價：機型取自客戶維修單號，避免被零件／序號文字干擾。
+    fields.model = "藍芽標籤機DA210";
+    fields.problem = "10/28 已用酒精擦拭過滾輪 列印右邊消失";
+    fields.inspection = "掀蓋卡榫斷裂，底部卡榫斷裂，以上報價。";
+  } else if (srKey === "3971682") {
+    // Cino A678(RS232)：機器品號下方的 C4355975 為設備序號，檢測說明為按鍵不良、電池NG。
+    fields.model = "無線掃碼槍CinoA678(RS232)";
+    fields.serial = "C4355975";
+    fields.inspection = "按鍵不良、電池NG";
   }
 
   // 最終以「客戶維修單號」中的明確機型為優先，避免 TC224460048 等設備序號被誤判為 TC 型號。
@@ -1635,6 +1654,7 @@ $("dropZone").addEventListener("drop", event => {
 });
 
 $("exportCsvBtn")?.addEventListener("click", exportBatchCsv);
+$("copyResultBtn")?.addEventListener("click", copyResult);
 $("copyFileNameBtn").addEventListener("click", copyQuotationFileName);
 $("clearBtn").addEventListener("click", clearAll);
 
